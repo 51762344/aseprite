@@ -1,0 +1,42 @@
+name: Build Aseprite for Windows
+
+on:
+  workflow_dispatch: # 支持手动点击一键启动
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@master
+
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Download Skia
+        run: |
+          curl -L -o skia.zip https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Windows-Release-x64.zip
+          tar -xf skia.zip -C .
+
+      - name: Compile Aseprite
+        run: |
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release `
+                -DLAF_BACKEND=skia `
+                -DSKIA_DIR=..\ `
+                -DSKIA_LIBRARY_DIR=..\out\Release-x64 `
+                -DSKIA_LIBRARY=..\out\Release-x64\skia.lib `
+                -G Ninja ..
+          ninja aseprite
+
+      - name: Upload Windows Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aseprite-Windows-Release
+          path: build/bin/
