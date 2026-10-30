@@ -1,0 +1,45 @@
+name: Release Windows Aseprite
+
+on:
+  workflow_dispatch: # 让你可以在网页上手动点按钮启动
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
+      - name: Setup Visual Studio MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Download Prebuilt Skia
+        shell: bash
+        run: |
+          curl -L -o skia.zip https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Windows-Release-x64.zip
+          unzip -q skia.zip -d skia
+
+      - name: Compile Aseprite
+        shell: bash
+        run: |
+          mkdir build
+          cd build
+          cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLAF_BACKEND=skia \
+            -DSKIA_DIR=$(pwd)/../skia \
+            -DSKIA_LIBRARY_DIR=$(pwd)/../skia/out/Release-x64 \
+            -DSKIA_LIBRARY=$(pwd)/../skia/out/Release-x64/skia.lib \
+            -G Ninja ..
+          ninja aseprite
+
+      - name: Upload Windows Executable (生成下载包)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aseprite-Windows-Portable
+          path: build/bin/
