@@ -1,10 +1,10 @@
 name: Release Windows Aseprite
 
 on:
-  workflow_dispatch: # 允许在 Actions 页面手动点击按钮运行
+  workflow_dispatch:
   push:
     paths:
-      - '.github/workflows/release-windows.yml' # 提交此文件时自动触发一次编译
+      - '.github/workflows/release-windows.yml'
 
 jobs:
   build-windows:
@@ -41,20 +41,28 @@ jobs:
             -DSKIA_DIR="${GITHUB_WORKSPACE}/skia" \
             -DSKIA_LIBRARY_DIR="${GITHUB_WORKSPACE}/skia/out/Release-x64" \
             -DSKIA_LIBRARY="${GITHUB_WORKSPACE}/skia/out/Release-x64/skia.lib" \
+            -DUSE_SHARED_CURL=OFF \
+            -DUSE_SHARED_ZLIB=OFF \
             -DENABLE_TESTS=OFF \
             -G Ninja ..
           ninja aseprite
 
-      - name: 6. 清理无用的静态库缓存 (减小下载体积)
+      - name: 6. 补齐运行所需的 DLL 并清理垃圾缓存
         shell: bash
         run: |
+          # 把云端环境里的 OpenSSL 等依赖 DLL 自动拷贝到 bin 目录中
+          cp /c/Program\ Files/OpenSSL-Win64/bin/*.dll build/bin/ 2>/dev/null || true
+          cp /mingw64/bin/libcrypto-3-x64.dll build/bin/ 2>/dev/null || true
+          cp /mingw64/bin/libssl-3-x64.dll build/bin/ 2>/dev/null || true
+          # 删掉不需要的静态库缓存
           rm -rf build/bin/*.lib build/bin/*.exp build/bin/*.pdb
 
-      - name: 7. 打包上传 Windows 免安装版到 Artifacts
+      - name: 7. 打包整个 bin 目录 (含 exe、所有 dll 和 data)
         uses: actions/upload-artifact@v4
         with:
           name: Aseprite-Windows-x64-Portable
           path: |
-            build/bin/aseprite.exe
+            build/bin/*.exe
+            build/bin/*.dll
             build/bin/data/
           if-no-files-found: error
