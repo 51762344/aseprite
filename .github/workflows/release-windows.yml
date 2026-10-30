@@ -1,30 +1,36 @@
 name: Release Windows Aseprite
 
 on:
-  workflow_dispatch: # 让你可以在网页上手动点按钮启动
+  workflow_dispatch: # 允许在 Actions 页面手动点击按钮运行
+  push:
+    paths:
+      - '.github/workflows/release-windows.yml' # 提交此文件时自动触发一次编译
 
 jobs:
-  build:
-    runs-on: windows-2022
+  build-windows:
+    runs-on: windows-latest
+
     steps:
-      - name: Checkout repository
+      - name: 1. 拉取 Aseprite 源码与所有子模块
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@v4
-
-      - name: Setup Visual Studio MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Download Prebuilt Skia
+      - name: 2. 下载官方预编译的 Skia 引擎 (m124)
         shell: bash
         run: |
           curl -L -o skia.zip https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Windows-Release-x64.zip
           unzip -q skia.zip -d skia
 
-      - name: Compile Aseprite
+      - name: 3. 安装官方指定的 Ninja 构建工具
+        uses: aseprite/get-ninja@main
+
+      - name: 4. 配置 Windows C++ 编译环境 (MSVC x64)
+        uses: TheMrMilchmann/setup-msvc-dev@v4
+        with:
+          arch: x64
+
+      - name: 5. 生成编译配置并开始编译 Aseprite
         shell: bash
         run: |
           mkdir build
@@ -32,14 +38,23 @@ jobs:
           cmake \
             -DCMAKE_BUILD_TYPE=Release \
             -DLAF_BACKEND=skia \
-            -DSKIA_DIR=$(pwd)/../skia \
-            -DSKIA_LIBRARY_DIR=$(pwd)/../skia/out/Release-x64 \
-            -DSKIA_LIBRARY=$(pwd)/../skia/out/Release-x64/skia.lib \
+            -DSKIA_DIR="${GITHUB_WORKSPACE}/skia" \
+            -DSKIA_LIBRARY_DIR="${GITHUB_WORKSPACE}/skia/out/Release-x64" \
+            -DSKIA_LIBRARY="${GITHUB_WORKSPACE}/skia/out/Release-x64/skia.lib" \
+            -DENABLE_TESTS=OFF \
             -G Ninja ..
           ninja aseprite
 
-      - name: Upload Windows Executable (生成下载包)
+      - name: 6. 清理无用的静态库缓存 (减小下载体积)
+        shell: bash
+        run: |
+          rm -rf build/bin/*.lib build/bin/*.exp build/bin/*.pdb
+
+      - name: 7. 打包上传 Windows 免安装版到 Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Aseprite-Windows-Portable
-          path: build/bin/
+          name: Aseprite-Windows-x64-Portable
+          path: |
+            build/bin/aseprite.exe
+            build/bin/data/
+          if-no-files-found: error
